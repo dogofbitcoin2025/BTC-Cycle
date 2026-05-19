@@ -1,0 +1,10 @@
+{
+  "name": "cycle-vs-liquidity",
+  "version": "1.0.0",
+  "description": "BTC macro regime dashboard — Thesis A (Calendar) vs Thesis B (Liquidity)",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  }
+}

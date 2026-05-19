@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYCLE vs LIQUIDITY — Macro Signal Desk</title>
+<link rel="manifest" href='data:application/manifest+json,{"name":"Cycle vs Liquidity","short_name":"CvL","display":"standalone","background_color":"%230a0a0a","theme_color":"%23d97706","start_url":"."}'>
+<meta name="theme-color" content="#d97706">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,900&display=swap');
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#0a0a0a; --panel:#111; --panel-2:#161616;
+  --line:#262626; --line-2:#3a3a3a;
+  --ink:#ededed; --ink-dim:#888; --ink-faint:#555;
+  --amber:#d97706; --amber-bright:#f59e0b;
+  --red:#dc2626; --green:#16a34a; --blue:#0891b2;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  --serif:'Fraunces',Georgia,serif;
+}
+body {
+  background:var(--bg); color:var(--ink);
+  font-family:var(--mono); font-size:13px; line-height:1.5;
+  min-height:100vh;
+  background-image:
+    radial-gradient(at 20% 0%, rgba(217,119,6,0.06) 0px, transparent 50%),
+    radial-gradient(at 80% 100%, rgba(8,145,178,0.05) 0px, transparent 50%);
+  padding-bottom:60px;
+}
+body::before {
+  content:''; position:fixed; inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:1; mix-blend-mode:overlay;
+}
+.wrap { max-width:1400px; margin:0 auto; padding:24px; position:relative; z-index:2; }
+
+.config-bar {
+  background:var(--panel-2); border:1px solid var(--line);
+  border-left:3px solid var(--amber);
+  padding:12px 16px; margin-bottom:16px;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:11px;
+}
+.config-bar label { color:var(--ink-dim); letter-spacing:0.1em; text-transform:uppercase; font-size:10px; }
+.config-bar input {
+  flex:1; min-width:200px;
+  background:var(--bg); border:1px solid var(--line);
+  color:var(--ink); font:inherit; padding:6px 10px;
+}
+.config-bar input:focus { outline:none; border-color:var(--amber); }
+.config-bar button {
+  background:var(--amber); color:#000; border:none;
+  font:inherit; padding:6px 14px; cursor:pointer;
+  letter-spacing:0.1em; text-transform:uppercase; font-weight:500;
+}
+.config-bar button:hover { background:var(--amber-bright); }
+.config-bar .status { display:inline-flex; align-items:center; gap:6px; font-size:10px; letter-spacing:0.15em; text-transform:uppercase; }
+.status-dot { width:8px; height:8px; border-radius:50%; background:var(--ink-faint); }
+.status-dot.live { background:var(--green); animation:pulse 2s ease-in-out infinite; }
+.status-dot.error { background:var(--red); }
+.status-dot.loading { background:var(--amber); animation:pulse 0.8s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity:0.4; } }
+
+header {
+  border:1px solid var(--line); border-bottom:2px solid var(--amber);
+  padding:20px 24px;
+  display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:16px;
+  background:linear-gradient(180deg,var(--panel) 0%,var(--bg) 100%);
+}
+.brand { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+.brand-mark { font-family:var(--serif); font-weight:900; font-size:32px; letter-spacing:-0.02em; line-height:1; }
+.brand-mark em { color:var(--amber); font-style:normal; }
+.brand-sub { font-size:10px; text-transform:uppercase; letter-spacing:0.25em; color:var(--ink-dim); border-left:1px solid var(--line-2); padding-left:14px; }
+.clock { font-size:11px; color:var(--ink-dim); text-align:right; }
+.clock-time { color:var(--ink); font-size:14px; font-weight:500; }
+.clock-label { text-transform:uppercase; letter-spacing:0.2em; font-size:9px; margin-top:2px; }
+
+.verdict {
+  margin-top:24px; border:1px solid var(--line); background:var(--panel);
+  padding:24px 28px;
+  display:grid; grid-template-columns:1fr auto 1fr; gap:32px; align-items:center;
+  position:relative; overflow:hidden;
+}
+.verdict::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,var(--amber),transparent); }
+.thesis { display:flex; flex-direction:column; gap:6px; }
+.thesis-label { font-size:10px; letter-spacing:0.3em; color:var(--ink-dim); text-transform:uppercase; }
+.thesis-title { font-family:var(--serif); font-size:20px; font-weight:600; letter-spacing:-0.01em; }
+.thesis-tagline { font-size:11px; color:var(--ink-dim); font-style:italic; }
+.thesis-score { font-family:var(--serif); font-size:64px; font-weight:900; line-height:1; letter-spacing:-0.04em; transition:color 0.4s; }
+.thesis.b { text-align:right; }
+.thesis.b .thesis-title { align-self:flex-end; }
+.verdict-center { text-align:center; border-left:1px solid var(--line); border-right:1px solid var(--line); padding:0 24px; }
+.verdict-arrow { font-family:var(--serif); font-size:11px; letter-spacing:0.3em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:8px; }
+.verdict-lean { font-family:var(--serif); font-size:24px; font-weight:900; letter-spacing:-0.01em; color:var(--amber-bright); }
+.verdict-confidence { font-size:10px; letter-spacing:0.2em; color:var(--ink-dim); margin-top:6px; text-transform:uppercase; }
+
+.grid { display:grid; grid-template-columns:repeat(12,1fr); gap:16px; margin-top:20px; }
+.panel { background:var(--panel); border:1px solid var(--line); padding:18px 20px; position:relative; }
+.panel-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+.panel-title { font-size:10px; letter-spacing:0.25em; text-transform:uppercase; color:var(--ink); font-weight:500; }
+.panel-meta { font-size:9px; color:var(--ink-faint); letter-spacing:0.15em; text-transform:uppercase; }
+.panel-num { font-family:var(--serif); font-size:10px; color:var(--ink-faint); font-weight:600; }
+
+.signal { grid-column:span 3; }
+.signal-value { font-family:var(--serif); font-size:38px; font-weight:900; letter-spacing:-0.03em; line-height:1.05; margin:6px 0 4px; }
+.signal-unit { font-family:var(--mono); font-size:14px; font-weight:400; color:var(--ink-dim); margin-left:4px; }
+.signal-name { font-size:11px; color:var(--ink-dim); text-transform:uppercase; letter-spacing:0.15em; }
+.signal-desc { font-size:11px; color:var(--ink-dim); margin-top:8px; line-height:1.5; }
+.signal-source { font-size:9px; color:var(--ink-faint); letter-spacing:0.15em; text-transform:uppercase; margin-top:6px; display:flex; justify-content:space-between; align-items:center; }
+.signal-input { width:100%; background:transparent; border:none; border-bottom:1px dashed var(--line-2); color:inherit; font:inherit; padding:2px 0; margin-top:8px; outline:none; font-size:11px; }
+.signal-input:focus { border-bottom-color:var(--amber); }
+.signal-input::placeholder { color:var(--ink-faint); }
+.signal-bar { height:3px; background:var(--panel-2); margin-top:14px; overflow:hidden; }
+.signal-bar-fill { height:100%; background:var(--amber); transition:width 0.4s ease; }
+.signal-state { display:inline-block; font-size:9px; padding:2px 8px; margin-top:10px; letter-spacing:0.2em; text-transform:uppercase; border:1px solid currentColor; }
+.state-calm { color:var(--green); }
+.state-watch { color:var(--amber); }
+.state-stress { color:var(--red); }
+.state-neutral { color:var(--ink-dim); }
+
+.thesis-panel { grid-column:span 6; }
+.thesis-panel-head { display:flex; justify-content:space-between; align-items:center; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+.thesis-tag { font-family:var(--serif); font-size:11px; font-style:italic; color:var(--ink-dim); }
+.thesis-tag strong { color:var(--ink); font-style:normal; font-family:var(--mono); }
+.scorecard { padding:14px 0; }
+.scoreline { display:grid; grid-template-columns:1fr auto auto; gap:14px; padding:9px 0; border-bottom:1px dotted var(--line); font-size:12px; align-items:center; }
+.scoreline:last-child { border-bottom:none; }
+.scoreline-label { color:var(--ink-dim); }
+.scoreline-weight { color:var(--ink-faint); font-size:10px; letter-spacing:0.15em; }
+.scoreline-points { font-family:var(--serif); font-size:16px; font-weight:700; min-width:30px; text-align:right; }
+.scoreline.pos .scoreline-points { color:var(--green); }
+.scoreline.neg .scoreline-points { color:var(--red); }
+.scoreline.neu .scoreline-points { color:var(--ink-dim); }
+.scoreline-final { margin-top:6px; padding-top:14px; border-top:1px solid var(--line-2); border-bottom:none; }
+.scoreline-final .scoreline-label { color:var(--ink); text-transform:uppercase; letter-spacing:0.2em; font-size:10px; }
+.scoreline-final .scoreline-points { font-size:24px; color:var(--amber-bright); }
+
+.playbook { grid-column:span 12; margin-top:4px; }
+.playbook-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.play { border:1px solid var(--line); padding:18px; background:var(--panel-2); position:relative; }
+.play-num { position:absolute; top:14px; right:16px; font-family:var(--serif); font-size:32px; font-weight:900; color:var(--line-2); line-height:1; }
+.play-when { font-size:9px; letter-spacing:0.25em; text-transform:uppercase; color:var(--amber); margin-bottom:8px; }
+.play-title { font-family:var(--serif); font-size:18px; font-weight:700; letter-spacing:-0.01em; margin-bottom:10px; }
+.play-action { font-size:12px; color:var(--ink-dim); line-height:1.6; }
+.play-action strong { color:var(--ink); font-weight:500; }
+
+footer { margin-top:24px; border-top:1px solid var(--line); padding-top:14px; display:flex; justify-content:space-between; font-size:10px; color:var(--ink-faint); letter-spacing:0.15em; text-transform:uppercase; flex-wrap:wrap; gap:10px; }
+footer button { background:none; border:1px solid var(--line); color:var(--ink-dim); font:inherit; padding:6px 14px; cursor:pointer; letter-spacing:0.15em; text-transform:uppercase; transition:all 0.2s; }
+footer button:hover { color:var(--amber); border-color:var(--amber); }
+
+@media (max-width:900px) {
+  .signal { grid-column:span 6; }
+  .thesis-panel { grid-column:span 12; }
+  .playbook-grid { grid-template-columns:1fr; }
+  .verdict { grid-template-columns:1fr; gap:16px; text-align:center; }
+  .verdict-center { border:none; padding:14px 0; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+  .thesis.b { text-align:center; }
+  .thesis.b .thesis-title { align-self:center; }
+  .brand-mark { font-size:24px; }
+}
+@keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.panel, .verdict { animation:fadeUp 0.5s ease backwards; }
+.panel:nth-child(1){animation-delay:0.05s}
+.panel:nth-child(2){animation-delay:0.10s}
+.panel:nth-child(3){animation-delay:0.15s}
+.panel:nth-child(4){animation-delay:0.20s}
+.panel:nth-child(5){animation-delay:0.25s}
+.panel:nth-child(6){animation-delay:0.30s}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="config-bar">
+  <label>Proxy URL</label>
+  <input type="text" id="proxyUrl" placeholder="https://your-project.vercel.app/api/signals" autocomplete="off">
+  <button id="connectBtn">Connect</button>
+  <div class="status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Offline · Manual mode</span>
+  </div>
+</div>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark">CYCLE <em>vs</em> LIQUIDITY</div>
+    <div class="brand-sub">Macro Signal Desk · BTC Regime Monitor</div>
+  </div>
+  <div class="clock">
+    <div class="clock-time" id="clock">--:--:--</div>
+    <div class="clock-label" id="date">— UTC</div>
+  </div>
+</header>
+
+<div class="verdict">
+  <div class="thesis a">
+    <div class="thesis-label">Thesis A · Calendar</div>
+    <div class="thesis-title">Halving Cycle Bottom</div>
+    <div class="thesis-tagline">"Buy October 2026. Hold until 2027."</div>
+    <div class="thesis-score" id="scoreA">—</div>
+  </div>
+  <div class="verdict-center">
+    <div class="verdict-arrow">→ Lean ←</div>
+    <div class="verdict-lean" id="leanText">CALCULATING</div>
+    <div class="verdict-confidence" id="confText">awaiting signals</div>
+  </div>
+  <div class="thesis b">
+    <div class="thesis-label">Thesis B · Liquidity</div>
+    <div class="thesis-title">Stealth YCC Repricing</div>
+    <div class="thesis-tagline">"Bonds break. Real rates flip. BTC moon."</div>
+    <div class="thesis-score" id="scoreB">—</div>
+  </div>
+</div>
+
+<div class="grid">
+
+  <div class="panel signal" data-signal="move">
+    <div class="panel-head"><div class="panel-title">MOVE Index</div><div class="panel-num">01</div></div>
+    <div class="signal-name">Treasury Bond Vol</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit">bps</span></div>
+    <div class="signal-source"><span>Yahoo · ^MOVE</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="1" placeholder="override" data-key="move">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Above 140 = bond market dysfunction. Forces Fed's hand. <strong style="color:var(--amber)">Bullish B.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="realrate">
+    <div class="panel-head"><div class="panel-title">10Y Real Yield</div><div class="panel-num">02</div></div>
+    <div class="signal-name">TIPS · DFII10</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit">%</span></div>
+    <div class="signal-source"><span>FRED · DFII10</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="0.05" placeholder="override" data-key="realrate">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Below 0% = hard assets repricing. Below 0.5% = momentum. <strong style="color:var(--amber)">Trigger B.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="etf">
+    <div class="panel-head"><div class="panel-title">BTC ETF Net Flows</div><div class="panel-num">03</div></div>
+    <div class="signal-name">5-Day Rolling · USD m</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit">m</span></div>
+    <div class="signal-source"><span>Farside · scrape</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="10" placeholder="override" data-key="etf">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Sustained outflows = A's seasonal dump in play. Strong inflows = 4Y cycle dead. <strong style="color:#0891b2">Kills A.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="tga">
+    <div class="panel-head"><div class="panel-title">Treasury Gen. Account</div><div class="panel-num">04</div></div>
+    <div class="signal-name">Balance · USD bn</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit">bn</span></div>
+    <div class="signal-source"><span>FRED · WTREGEN</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="10" placeholder="override" data-key="tga">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Below 500bn = liquidity injection accelerating. Fuel for risk assets. <strong style="color:var(--amber)">Bullish B.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="sofr">
+    <div class="panel-head"><div class="panel-title">SOFR – Fed Funds</div><div class="panel-num">05</div></div>
+    <div class="signal-name">Funding Stress · bps</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit">bps</span></div>
+    <div class="signal-source"><span>FRED · SOFR–DFF</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="1" placeholder="override" data-key="sofr">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Above 10bps = funding stress. Above 20bps = repo crisis territory. <strong style="color:var(--amber)">Bullish B.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="dxy">
+    <div class="panel-head"><div class="panel-title">DXY</div><div class="panel-num">06</div></div>
+    <div class="signal-name">Dollar Index</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit"></span></div>
+    <div class="signal-source"><span>Yahoo · DX-Y.NYB</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="0.1" placeholder="override" data-key="dxy">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Below 96 = weakening dollar, hard asset tailwind. <strong style="color:var(--amber)">Bullish B if falls.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="btc">
+    <div class="panel-head"><div class="panel-title">BTC Spot</div><div class="panel-num">07</div></div>
+    <div class="signal-name">Price · USD</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit"></span></div>
+    <div class="signal-source"><span>CoinGecko</span><span class="delta"></span></div>
+    <input class="signal-input" type="number" step="100" placeholder="override" data-key="btc">
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">Below 70k = A's bottom thesis active. Track relative to Q1 high. <strong style="color:#888">Context.</strong></div>
+  </div>
+
+  <div class="panel signal" data-signal="halving">
+    <div class="panel-head"><div class="panel-title">Days Post-Halving</div><div class="panel-num">08</div></div>
+    <div class="signal-name">2024 Halving · April 19</div>
+    <div class="signal-value"><span class="val">—</span><span class="signal-unit">d</span></div>
+    <div class="signal-source"><span>Calendar</span><span class="delta"></span></div>
+    <div class="signal-bar"><div class="signal-bar-fill"></div></div>
+    <div class="signal-state state-neutral">⏵ —</div>
+    <div class="signal-desc">A's Oct 2026 target = ~927d. Historical bottoms cluster 910–1100d. <strong style="color:#0891b2">Core of A.</strong></div>
+  </div>
+
+  <div class="panel thesis-panel">
+    <div class="thesis-panel-head">
+      <div>
+        <div class="panel-title" style="margin-bottom:4px;">Scorecard · Thesis A</div>
+        <div class="thesis-tag">Sample size: <strong>n=3</strong>. Causal mechanism: <strong>weak</strong>.</div>
+      </div>
+      <div class="panel-num">A</div>
+    </div>
+    <div class="scorecard" id="cardA"></div>
+  </div>
+
+  <div class="panel thesis-panel">
+    <div class="thesis-panel-head">
+      <div>
+        <div class="panel-title" style="margin-bottom:4px;">Scorecard · Thesis B</div>
+        <div class="thesis-tag">Mechanism: <strong>strong</strong>. Timing risk: <strong>high</strong>.</div>
+      </div>
+      <div class="panel-num">B</div>
+    </div>
+    <div class="scorecard" id="cardB"></div>
+  </div>
+
+  <div class="panel playbook">
+    <div class="panel-head">
+      <div class="panel-title">Playbook · Three Regimes</div>
+      <div class="panel-meta">Position sizing · not timing</div>
+    </div>
+    <div class="playbook-grid">
+      <div class="play">
+        <div class="play-num">01</div>
+        <div class="play-when">If MOVE › 140 & Real Rate ‹ 0.5</div>
+        <div class="play-title">Liquidity break confirmed</div>
+        <div class="play-action"><strong>Front-load.</strong> B-thesis playing out. Add to BTC aggressively. Ignore calendar. Funding stress short-circuits seasonality.</div>
+      </div>
+      <div class="play">
+        <div class="play-num">02</div>
+        <div class="play-when">If ETF outflows & BTC ‹ Q1 high</div>
+        <div class="play-title">Calendar plays out</div>
+        <div class="play-action"><strong>Scale in toward October.</strong> Classic midterm shakeout. Build 50% position by Sep, hold dry powder for the final flush.</div>
+      </div>
+      <div class="play">
+        <div class="play-num">03</div>
+        <div class="play-when">If chop · no clear signal</div>
+        <div class="play-title">Both theses unresolved</div>
+        <div class="play-action"><strong>DCA mechanically.</strong> Size positions to survive being wrong either way. Don't try to time the bottom.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  <span id="lastUpdate">Not yet fetched · Enter proxy URL above</span>
+  <div style="display:flex; gap:10px;">
+    <button id="refresh">Refresh now</button>
+    <button id="reset">Clear overrides</button>
+  </div>
+</footer>
+
+</div>
+
+<script>
+const signals = {
+  move:     { min:60,  max:180, calm:[60,100],  watch:[100,140], stress:[140,180] },
+  realrate: { min:-2,  max:3,   calm:[0.5,3],   watch:[0,0.5],   stress:[-2,0] },
+  etf:      { min:-2500,max:5000,calm:[1000,5000],watch:[-250,1000], stress:[-2500,-250] },
+  tga:      { min:200, max:900, calm:[700,900], watch:[500,700], stress:[200,500] },
+  sofr:     { min:-5,  max:30,  calm:[-5,5],    watch:[5,15],    stress:[15,30] },
+  dxy:      { min:90,  max:115, calm:[100,105], watch:[96,100],  stress:[90,96] },
+  btc:      { min:30000,max:150000,calm:[80000,150000],watch:[60000,80000],stress:[30000,60000] },
+  halving:  { min:0,   max:1500, calm:[850,1000], watch:[750,850], stress:[1000,1500] }
+};
+
+let live = {};
+let overrides = {};
+let fetchedAt = null;
+
+try {
+  const saved = localStorage.getItem('cvl-overrides');
+  if (saved) overrides = JSON.parse(saved);
+  const url = localStorage.getItem('cvl-proxy');
+  if (url) document.getElementById('proxyUrl').value = url;
+} catch(e) {}
+
+function tick() {
+  const d = new Date();
+  document.getElementById('clock').textContent = d.toISOString().slice(11,19);
+  document.getElementById('date').textContent = d.toISOString().slice(0,10).replace(/-/g,'·') + ' — UTC';
+}
+setInterval(tick, 1000); tick();
+
+function val(key) {
+  if (overrides[key] !== undefined && overrides[key] !== null && !isNaN(overrides[key])) return overrides[key];
+  return live[key] ?? null;
+}
+
+function setStatus(state, text) {
+  document.getElementById('statusDot').className = 'status-dot ' + state;
+  document.getElementById('statusText').textContent = text;
+}
+
+async function fetchLive() {
+  const url = document.getElementById('proxyUrl').value.trim();
+  if (!url) { setStatus('', 'Offline · Manual mode'); return; }
+  setStatus('loading', 'Fetching…');
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+
+    const s = data.signals || {};
+    live.move     = s.move?.value     ?? null;
+    live.realrate = s.realrate?.value ?? null;
+    live.etf      = s.etf?.value      ?? null;
+    live.tga      = s.tga?.value ? s.tga.value / 1000 : null; // FRED reports m, want bn
+    live.sofr     = s.sofr?.value     ?? null;
+    live.dxy      = s.dxy?.value      ?? null;
+    live.btc      = s.btc?.value      ?? null;
+    live.halving  = s.halving?.value  ?? null;
+
+    fetchedAt = new Date();
+    setStatus('live', 'Live · ' + fetchedAt.toISOString().slice(11,19));
+    document.getElementById('lastUpdate').textContent =
+      'Last fetch: ' + fetchedAt.toISOString().slice(0,19).replace('T',' ') + ' UTC';
+    try { localStorage.setItem('cvl-proxy', url); } catch(e) {}
+    render();
+  } catch (e) {
+    setStatus('error', 'Error · ' + (e.message || 'fetch failed'));
+    const halv = new Date('2024-04-19');
+    live.halving = Math.floor((Date.now() - halv.getTime()) / 86400000);
+    render();
+  }
+}
+
+function renderSignal(key) {
+  const cfg = signals[key];
+  const panel = document.querySelector(`[data-signal="${key}"]`);
+  if (!panel) return;
+  const v = val(key);
+  const valEl = panel.querySelector('.val');
+  const stateEl = panel.querySelector('.signal-state');
+  const bar = panel.querySelector('.signal-bar-fill');
+  const deltaEl = panel.querySelector('.delta');
+
+  if (v === null || v === undefined || isNaN(v)) {
+    valEl.textContent = '—';
+    bar.style.width = '0';
+    stateEl.className = 'signal-state state-neutral';
+    stateEl.textContent = '⏵ —';
+    if (deltaEl) deltaEl.textContent = '';
+    return;
+  }
+
+  let display = v;
+  if (key === 'btc') display = Math.round(v).toLocaleString();
+  else if (key === 'etf') display = (v > 0 ? '+' : '') + Math.round(v).toLocaleString();
+  else if (key === 'realrate' || key === 'dxy') display = (+v).toFixed(2);
+  else display = Math.round(v);
+  valEl.textContent = display;
+
+  const pct = Math.max(0, Math.min(100, ((v - cfg.min) / (cfg.max - cfg.min)) * 100));
+  bar.style.width = pct + '%';
+
+  let label = '—', cls = 'state-neutral';
+  if (v >= cfg.calm[0] && v <= cfg.calm[1]) { label = 'Calm'; cls = 'state-calm'; }
+  else if (v >= cfg.watch[0] && v <= cfg.watch[1]) { label = 'Watch'; cls = 'state-watch'; }
+  else if (v >= cfg.stress[0] && v <= cfg.stress[1]) { label = 'Stress'; cls = 'state-stress'; }
+
+  const labels = {
+    calm: { realrate:'Restrictive', etf:'Strong inflow', tga:'Filling', dxy:'Range', sofr:'Normal', halving:'Bottom window' },
+    watch: { etf:'Tepid', halving:'Approaching' },
+    stress: { realrate:'Negative', etf:'Outflow', sofr:'Stress' }
+  };
+  if (labels[cls.replace('state-','')]?.[key]) label = labels[cls.replace('state-','')][key];
+
+  stateEl.className = 'signal-state ' + cls;
+  stateEl.textContent = '⏵ ' + label;
+  bar.style.background = cls==='state-stress' ? 'var(--red)' :
+                          cls==='state-watch' ? 'var(--amber)' :
+                          cls==='state-calm' ? 'var(--green)' : 'var(--ink-faint)';
+
+  if (deltaEl) {
+    if (overrides[key] !== undefined && overrides[key] !== null) {
+      deltaEl.textContent = '⚙ override'; deltaEl.style.color = 'var(--amber)';
+    } else if (live[key] !== null && live[key] !== undefined) {
+      deltaEl.textContent = 'live'; deltaEl.style.color = 'var(--green)';
+    } else {
+      deltaEl.textContent = ''; deltaEl.style.color = 'var(--ink-faint)';
+    }
+  }
+}
+
+function compute() {
+  let B = 0, A = 0;
+  const bRows = [], aRows = [];
+
+  const m = val('move');
+  let p = m===null ? 0 : m>140?+25 : m>120?+15 : m>100?+5 : -5;
+  B += p; bRows.push(['MOVE bond vol', 'weight 25%', p]);
+
+  const rr = val('realrate');
+  p = rr===null ? 0 : rr<0?+25 : rr<0.5?+18 : rr<1?+5 : -10;
+  B += p; bRows.push(['10Y Real Yield', 'weight 25%', p]);
+
+  const tga = val('tga');
+  p = tga===null ? 0 : tga<500?+15 : tga<700?+5 : -5;
+  B += p; bRows.push(['TGA drawdown', 'weight 15%', p]);
+
+  const sofr = val('sofr');
+  p = sofr===null ? 0 : sofr>15?+20 : sofr>10?+12 : sofr>5?+5 : -3;
+  B += p; bRows.push(['Funding stress', 'weight 20%', p]);
+
+  const dxy = val('dxy');
+  p = dxy===null ? 0 : dxy<96?+15 : dxy<100?+5 : dxy>105?-10 : 0;
+  B += p; bRows.push(['Dollar Index', 'weight 15%', p]);
+
+  const days = val('halving');
+  let hs;
+  if (days===null) hs = 0;
+  else if (days >= 850 && days <= 1000) hs = +25;
+  else if (days >= 750 && days <= 1100) hs = +15;
+  else hs = +5;
+  A += hs; aRows.push(['Halving day window', 'weight 25%', hs]);
+
+  const etf = val('etf');
+  p = etf===null ? 0 : etf<-250?+25 : etf<500?+12 : etf>2000?-20 : 0;
+  A += p; aRows.push(['ETF flow seasonality', 'weight 25%', p]);
+
+  const btc = val('btc');
+  const Q1_HIGH = 95000;
+  p = btc===null ? 0 : btc < Q1_HIGH*0.85 ? +20 : btc < Q1_HIGH ? +10 : -10;
+  A += p; aRows.push(['BTC vs Q1 high', 'weight 20%', p]);
+
+  const month = new Date().getMonth()+1;
+  p = (month>=5 && month<=10) ? +15 : +5;
+  A += p; aRows.push(['Calendar position', 'weight 15%', p]);
+
+  p = (m !== null && sofr !== null && m < 130 && sofr < 10) ? +15 :
+      (m === null || sofr === null) ? 0 : -10;
+  A += p; aRows.push(['Orderly macro tape', 'weight 15%', p]);
+
+  A = Math.max(0, Math.min(100, A));
+  B = Math.max(0, Math.min(100, B));
+
+  renderCard('cardA', aRows, A);
+  renderCard('cardB', bRows, B);
+
+  document.getElementById('scoreA').textContent = A;
+  document.getElementById('scoreB').textContent = B;
+
+  const lean = document.getElementById('leanText');
+  const conf = document.getElementById('confText');
+  const diff = Math.abs(A - B);
+
+  if (diff < 8) { lean.textContent = 'SPLIT TAPE'; lean.style.color = '#888'; conf.textContent = 'DCA · low conviction'; }
+  else if (B > A) {
+    if (B > 70 && diff > 25) { lean.textContent = 'B · STRONG'; lean.style.color = '#dc2626'; conf.textContent = 'Liquidity break active'; }
+    else { lean.textContent = 'B · LIQUIDITY'; lean.style.color = '#d97706'; conf.textContent = 'Macro tilts B'; }
+  } else {
+    if (A > 70 && diff > 25) { lean.textContent = 'A · STRONG'; lean.style.color = '#16a34a'; conf.textContent = 'Calendar setup intact'; }
+    else { lean.textContent = 'A · CALENDAR'; lean.style.color = '#0891b2'; conf.textContent = 'Cycle path favored'; }
+  }
+
+  document.getElementById('scoreA').style.color = A > 60 ? '#0891b2' : A > 40 ? '#ededed' : '#555';
+  document.getElementById('scoreB').style.color = B > 60 ? '#d97706' : B > 40 ? '#ededed' : '#555';
+}
+
+function renderCard(id, rows, total) {
+  const el = document.getElementById(id);
+  let html = '';
+  for (const [lbl, w, pts] of rows) {
+    const cls = pts > 0 ? 'pos' : pts < 0 ? 'neg' : 'neu';
+    const sign = pts > 0 ? '+' : '';
+    html += `<div class="scoreline ${cls}"><div class="scoreline-label">${lbl}</div><div class="scoreline-weight">${w}</div><div class="scoreline-points">${sign}${pts}</div></div>`;
+  }
+  html += `<div class="scoreline scoreline-final"><div class="scoreline-label">Total Conviction</div><div class="scoreline-weight">/ 100</div><div class="scoreline-points">${total}</div></div>`;
+  el.innerHTML = html;
+}
+
+function render() {
+  Object.keys(signals).forEach(renderSignal);
+  compute();
+}
+
+document.querySelectorAll('.signal-input').forEach(input => {
+  const key = input.dataset.key;
+  if (overrides[key] !== undefined) input.value = overrides[key];
+  input.addEventListener('input', e => {
+    const v = e.target.value;
+    if (v === '' || v === null) delete overrides[key];
+    else overrides[key] = parseFloat(v);
+    try { localStorage.setItem('cvl-overrides', JSON.stringify(overrides)); } catch(e) {}
+    render();
+  });
+});
+
+document.getElementById('reset').addEventListener('click', () => {
+  overrides = {};
+  try { localStorage.removeItem('cvl-overrides'); } catch(e) {}
+  document.querySelectorAll('.signal-input').forEach(i => i.value = '');
+  render();
+});
+
+document.getElementById('refresh').addEventListener('click', fetchLive);
+document.getElementById('connectBtn').addEventListener('click', fetchLive);
+document.getElementById('proxyUrl').addEventListener('keydown', e => { if (e.key === 'Enter') fetchLive(); });
+
+const halv = new Date('2024-04-19');
+live.halving = Math.floor((Date.now() - halv.getTime()) / 86400000);
+render();
+
+if (document.getElementById('proxyUrl').value) {
+  fetchLive();
+  setInterval(fetchLive, 5 * 60 * 1000);
+}
+</script>
+</body>
+</html>
