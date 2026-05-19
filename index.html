@@ -93,6 +93,65 @@ header {
 .verdict-lean { font-family:var(--serif); font-size:24px; font-weight:900; letter-spacing:-0.01em; color:var(--amber-bright); }
 .verdict-confidence { font-size:10px; letter-spacing:0.2em; color:var(--ink-dim); margin-top:6px; text-transform:uppercase; }
 
+/* ── NARRATIVE PANEL ── */
+.narrative {
+  margin-top:16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-left:3px solid var(--blue);
+  padding:22px 28px;
+}
+.narrative-head {
+  display:flex; justify-content:space-between; align-items:baseline;
+  margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid var(--line);
+}
+.narrative-title {
+  font-size:10px; letter-spacing:0.25em; text-transform:uppercase;
+  color:var(--ink); font-weight:500;
+}
+.narrative-time {
+  font-size:9px; letter-spacing:0.2em; text-transform:uppercase;
+  color:var(--ink-faint);
+}
+.narrative-body {
+  font-family:var(--serif);
+  font-size:15px; line-height:1.65;
+  color:var(--ink); font-weight:400;
+}
+.narrative-body p {
+  margin-bottom:10px;
+}
+.narrative-body p:last-child { margin-bottom:0; }
+.narrative-body strong {
+  font-weight:700; color:var(--amber-bright);
+  font-family:var(--serif);
+}
+.narrative-body em {
+  font-style:italic; color:var(--ink-dim);
+}
+.narrative-body .tag {
+  display:inline-block;
+  font-family:var(--mono); font-size:11px;
+  padding:1px 7px; margin:0 2px;
+  border:1px solid var(--line-2);
+  background:var(--panel-2);
+  letter-spacing:0.05em;
+  font-weight:500;
+}
+.narrative-body .tag.bull { color:var(--green); border-color:var(--green); }
+.narrative-body .tag.bear { color:var(--red); border-color:var(--red); }
+.narrative-body .tag.warn { color:var(--amber); border-color:var(--amber); }
+.narrative-empty {
+  font-style:italic; color:var(--ink-dim);
+  font-family:var(--mono); font-size:13px;
+}
+.narrative-divider {
+  font-family:var(--serif); color:var(--amber);
+  margin:14px 0 10px;
+  font-size:11px; letter-spacing:0.3em; text-transform:uppercase;
+  font-style:italic; font-weight:400;
+}
+
 .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:16px; margin-top:20px; }
 .panel { background:var(--panel); border:1px solid var(--line); padding:18px 20px; position:relative; }
 .panel-head { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--line); }
@@ -208,6 +267,17 @@ footer button:hover { color:var(--amber); border-color:var(--amber); }
     <div class="thesis-title">Stealth YCC Repricing</div>
     <div class="thesis-tagline">"Bonds break. Real rates flip. BTC moon."</div>
     <div class="thesis-score" id="scoreB">—</div>
+  </div>
+</div>
+
+<!-- NARRATIVE INTERPRETATION -->
+<div class="narrative" id="narrative">
+  <div class="narrative-head">
+    <div class="narrative-title">Read · The State of the Tape</div>
+    <div class="narrative-time" id="narrativeTime"></div>
+  </div>
+  <div class="narrative-body" id="narrativeBody">
+    <p class="narrative-empty">Connect the proxy to see the live interpretation.</p>
   </div>
 </div>
 
@@ -583,6 +653,153 @@ function renderCard(id, rows, total) {
 function render() {
   Object.keys(signals).forEach(renderSignal);
   compute();
+  generateNarrative();
+}
+
+// ── Narrative interpretation engine ──────────────────────────────
+function generateNarrative() {
+  const body = document.getElementById('narrativeBody');
+  const time = document.getElementById('narrativeTime');
+
+  const m = val('move'), rr = val('realrate'), etf = val('etf');
+  const tga = val('tga'), sofr = val('sofr'), dxy = val('dxy');
+  const btc = val('btc'), days = val('halving');
+
+  const hasData = [m, rr, sofr, dxy, btc].some(x => x !== null && x !== undefined);
+  if (!hasData) {
+    body.innerHTML = '<p class="narrative-empty">Connect the proxy to see the live interpretation.</p>';
+    time.textContent = '';
+    return;
+  }
+
+  time.textContent = new Date().toISOString().slice(11,16) + ' UTC';
+
+  // ─── Build assessment of B (Liquidity thesis) ───
+  const bSignals = []; // each: {state: 'bull'|'bear'|'neutral', text: '...'}
+
+  if (m !== null) {
+    if (m > 140) bSignals.push({s:'bull', t:`MOVE bei <strong>${Math.round(m)}</strong> ist Bond-Market-Dysfunktion`});
+    else if (m > 110) bSignals.push({s:'warn', t:`MOVE bei <strong>${Math.round(m)}</strong> zeigt erhöhte Bond-Vol`});
+    else if (m < 90) bSignals.push({s:'bear', t:`MOVE bei <strong>${Math.round(m)}</strong> ist ungewöhnlich niedrig — Bond-Vol seit Jahren nicht so ruhig`});
+    else bSignals.push({s:'neutral', t:`MOVE bei <strong>${Math.round(m)}</strong> ist im Normalbereich`});
+  }
+
+  if (rr !== null) {
+    if (rr < 0) bSignals.push({s:'bull', t:`Realzins bei <strong>${rr.toFixed(2)}%</strong> ist <em>negativ</em> — hard-asset repricing läuft`});
+    else if (rr < 0.5) bSignals.push({s:'warn', t:`Realzins bei <strong>${rr.toFixed(2)}%</strong> nähert sich Null — B-Trigger in Reichweite`});
+    else if (rr > 1.8) bSignals.push({s:'bear', t:`Realzins bei <strong>${rr.toFixed(2)}%</strong> ist <em>hoch restriktiv</em> — exakt das Gegenteil vom "Real-Zins flippt negativ"-Szenario`});
+    else bSignals.push({s:'neutral', t:`Realzins bei <strong>${rr.toFixed(2)}%</strong> ist mäßig restriktiv`});
+  }
+
+  if (tga !== null) {
+    if (tga < 500) bSignals.push({s:'bull', t:`TGA bei <strong>${Math.round(tga)} Mrd</strong> wird abgebaut — Liquiditätsinjektion läuft`});
+    else if (tga > 800) bSignals.push({s:'bear', t:`TGA bei <strong>${Math.round(tga)} Mrd</strong> ist voll gefüllt — keine Liquiditätsinjektion`});
+  }
+
+  if (sofr !== null) {
+    if (sofr > 15) bSignals.push({s:'bull', t:`SOFR-Spread bei <strong>${Math.round(sofr)}bps</strong> = Funding Stress, Repo-Krisen-Territorium`});
+    else if (sofr > 5) bSignals.push({s:'warn', t:`SOFR-Spread bei <strong>${Math.round(sofr)}bps</strong> zeigt leichten Funding-Druck`});
+    else if (sofr < 0) bSignals.push({s:'bear', t:`SOFR <em>unter</em> Fed Funds (<strong>${Math.round(sofr)}bps</strong>) — kein Funding-Stress, im Gegenteil`});
+  }
+
+  if (dxy !== null) {
+    if (dxy < 96) bSignals.push({s:'bull', t:`DXY bei <strong>${dxy.toFixed(1)}</strong> = schwacher Dollar, Tailwind für hard assets`});
+    else if (dxy > 105) bSignals.push({s:'bear', t:`DXY bei <strong>${dxy.toFixed(1)}</strong> stark — Gegenwind für Risk-Assets`});
+  }
+
+  // ─── Build assessment of A (Calendar thesis) ───
+  const aSignals = [];
+
+  if (days !== null) {
+    if (days >= 850 && days <= 1000) aSignals.push({s:'bull', t:`<strong>${days} Tage post-Halving</strong> — mitten im historischen Bottom-Fenster (850–1000d)`});
+    else if (days >= 750) aSignals.push({s:'warn', t:`<strong>${days} Tage post-Halving</strong> — Bottom-Fenster nähert sich, aber noch nicht erreicht`});
+    else aSignals.push({s:'neutral', t:`<strong>${days} Tage post-Halving</strong> — noch früh im Zyklus`});
+  }
+
+  if (btc !== null) {
+    const Q1_HIGH = 95000;
+    if (btc < Q1_HIGH * 0.85) aSignals.push({s:'bull', t:`BTC bei <strong>$${Math.round(btc).toLocaleString()}</strong> deutlich unter Q1-High — A's Drawdown-Setup aktiv`});
+    else if (btc < Q1_HIGH) aSignals.push({s:'warn', t:`BTC bei <strong>$${Math.round(btc).toLocaleString()}</strong> unter Q1-High, aber moderat`});
+    else aSignals.push({s:'bear', t:`BTC bei <strong>$${Math.round(btc).toLocaleString()}</strong> über Q1-High — A's Drawdown-Logik kollabiert`});
+  }
+
+  if (etf !== null) {
+    if (etf < -250) aSignals.push({s:'bull', t:`ETF-Flows klar negativ — A's seasonal dump in play`});
+    else if (etf > 2000) aSignals.push({s:'bear', t:`ETF-Flows stark positiv — institutionelles Bid bricht A's seasonality`});
+  }
+
+  // ─── Compose the actual narrative ───
+  const scoreA = +document.getElementById('scoreA').textContent || 0;
+  const scoreB = +document.getElementById('scoreB').textContent || 0;
+  const diff = scoreA - scoreB;
+
+  let html = '';
+
+  // Opening verdict
+  if (Math.abs(diff) < 8) {
+    html += `<p><strong>Split Tape.</strong> Beide Thesen ungefähr gleichauf (A ${scoreA} · B ${scoreB}). Kein klarer Edge — das Setup ist ambivalent.</p>`;
+  } else if (diff > 25) {
+    html += `<p><strong>Klares Bild: A · Calendar dominiert.</strong> (A ${scoreA} vs B ${scoreB}). Die makroökonomische Lage stützt B aktuell nicht — der Zyklus-Pfad hat das stärkere Faktor-Setup.</p>`;
+  } else if (diff > 0) {
+    html += `<p><strong>Leichter Tilt zu A · Calendar</strong> (A ${scoreA} vs B ${scoreB}). Der Zyklus-Pfad ist favorisiert, aber B ist nicht aus dem Spiel.</p>`;
+  } else if (diff < -25) {
+    html += `<p><strong>Klares Bild: B · Liquidity dominiert.</strong> (B ${scoreB} vs A ${scoreA}). Macro tilts decisively bearish bonds / bullish hard assets — der Liquiditäts-Pfad hat sich durchgesetzt.</p>`;
+  } else {
+    html += `<p><strong>Leichter Tilt zu B · Liquidity</strong> (B ${scoreB} vs A ${scoreA}). Makro-Stress nimmt zu, aber noch kein klarer Break.</p>`;
+  }
+
+  // What B says
+  const bBulls = bSignals.filter(s => s.s === 'bull');
+  const bBears = bSignals.filter(s => s.s === 'bear');
+  const bWarns = bSignals.filter(s => s.s === 'warn');
+
+  if (bBears.length >= 2) {
+    html += `<p><em>Gegen B:</em> ${bBears.map(s => s.t).join('. ')}. Die "Bonds explodieren, Real-Zins flippt negativ"-Erzählung ist von den Daten nicht gedeckt — eher das Gegenteil.</p>`;
+  } else if (bBulls.length >= 2) {
+    html += `<p><em>Für B:</em> ${bBulls.map(s => s.t).join('. ')}. Mehrere Liquiditäts-Trigger feuern gleichzeitig — das ist die Konstellation, auf die B wartet.</p>`;
+  } else if (bWarns.length >= 1) {
+    html += `<p><em>Frühe Signale für B:</em> ${bWarns.map(s => s.t).join('. ')}. Noch kein Trigger-Event, aber die Vorzeichen wackeln.</p>`;
+  } else {
+    const all = [...bBears, ...bBulls, ...bWarns];
+    if (all.length) html += `<p><em>B-Lage:</em> ${all.map(s => s.t).join('. ')}.</p>`;
+  }
+
+  // What A says
+  const aBulls = aSignals.filter(s => s.s === 'bull');
+  const aBears = aSignals.filter(s => s.s === 'bear');
+
+  if (aBulls.length >= 2) {
+    html += `<p><em>Für A:</em> ${aBulls.map(s => s.t).join('. ')}. Das ist das klassische Midterm-Year-Setup — orderly tape, BTC unter Hoch, Halving-Window in Sicht.</p>`;
+  } else if (aBears.length >= 2) {
+    html += `<p><em>Gegen A:</em> ${aBears.map(s => s.t).join('. ')}. Die Kalender-Logik wird gerade live demontiert.</p>`;
+  } else if (aSignals.length) {
+    html += `<p><em>A-Lage:</em> ${aSignals.map(s => s.t).join('. ')}.</p>`;
+  }
+
+  // What to actually do
+  html += `<div class="narrative-divider">→ Handlung</div>`;
+
+  if (scoreB > 70 && diff < -25) {
+    html += `<p>Liquidity-Break aktiv. Front-load BTC, ignoriere den Kalender. Funding-Stress short-circuits seasonality. <span class="tag bull">B confirmed</span></p>`;
+  } else if (scoreA > 60 && diff > 15) {
+    html += `<p>Kalender-Setup intakt, B braucht erstmal ein Trigger-Event. Scale in Richtung Oktober — 50% Position bis September, Rest für den finalen Flush. <span class="tag bull">A path</span></p>`;
+  } else if (Math.abs(diff) < 15) {
+    html += `<p>Keine klare Direktion. DCA mechanisch, size Positionen so dass du beide Szenarien überlebst. Nicht versuchen den Boden zu timen. <span class="tag warn">chop</span></p>`;
+  } else {
+    html += `<p>Direktional zwar geklärt, aber Conviction nicht hoch genug für aggressive Allokation. Folge der Lean mit halber Größe, beobachte die Trigger-Signale. <span class="tag warn">soft lean</span></p>`;
+  }
+
+  // What to watch
+  const triggers = [];
+  if (m !== null && m < 130 && m > 90) triggers.push(`MOVE › 140`);
+  if (rr !== null && rr > 0.5) triggers.push(`Real Yield ‹ 0.5%`);
+  if (sofr !== null && sofr < 10) triggers.push(`SOFR-Spread › 15bps`);
+
+  if (triggers.length && scoreB < 60) {
+    html += `<p style="font-size:13px; color:var(--ink-dim); margin-top:6px;"><em>Watch list für B-Trigger:</em> ${triggers.join(' · ')}. Wenn zwei davon gleichzeitig kippen, ändert sich das Bild schnell.</p>`;
+  }
+
+  body.innerHTML = html;
 }
 
 document.querySelectorAll('.signal-input').forEach(input => {
